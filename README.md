@@ -1,44 +1,57 @@
 # Saucedemo E2E Tests — Playwright + TypeScript
 
-End-to-end UI automation for [saucedemo.com](https://www.saucedemo.com) built with **Playwright** and **TypeScript**.
+End-to-end UI automation for [saucedemo.com](https://www.saucedemo.com), built with **Playwright** and **TypeScript**.
 
-This is a learning project where I practiced modern QA automation patterns I would use on a real team: the Page Object Model, dependency-chained fixtures, web-first assertions, parameterized negative tests, and CI integration via GitHub Actions.
+This is my first QA automation portfolio project — a practice ground for the patterns I'd use on a real team: the Page Object Model, dependency-chained fixtures, web-first assertions, parameterized negative tests, and CI via GitHub Actions.
 
 ---
 
-## Tech Stack
+## Tech stack
 
-- **[Playwright](https://playwright.dev/)** — modern end-to-end testing framework with auto-waiting and trace viewer
-- **TypeScript** — static typing for tests and page objects
+- **[Playwright](https://playwright.dev/)** — auto-waiting, trace viewer, built-in test runner
+- **TypeScript**
 - **Node.js 20+**
-- **GitHub Actions** — CI: tests run on every push and pull request
+- **GitHub Actions** — CI on every push and pull request
 
 ---
 
-## What's Covered
+## What's covered
+
+### Login
+- Brand logo visible on the login page
+- Login with valid credentials → lands on the Products page
+- Login with wrong password / empty username / empty password → correct error message
+- `locked_out_user` → "this user has been locked out" error
+
+### Catalog (inventory)
+- Inventory loads with all 6 products visible
+- Add one product → cart badge shows the right count
+- Add three products → cart badge updates accordingly
+- Add then remove a product from the inventory page
+- Sort by name (A → Z) → list matches alphabetical order
+- Sort by price (low → high) → list matches ascending price order
 
 ### Cart
-- Add an item to cart → cart badge shows correct count
-- Added item appears in cart with the correct name
-- Remove an item from cart → item disappears
+- Added item appears in the cart with the correct name
+- Remove an item from the cart → item disappears
 - "Continue Shopping" returns to the inventory page
 
 ### Checkout
-- Full happy-path purchase: login → add product → cart → checkout → fill info → finish → "Thank you for your order!" confirmation
-- Negative validation cases:
-  - Empty First Name → "Error: First Name is required"
-  - Empty Last Name → "Error: Last Name is required"
-  - Empty Postal Code → "Error: Postal Code is required"
+- Full happy path: login → add product → cart → checkout → fill info → finish → "Thank you for your order!" confirmation
+- Negative validation: empty First Name / Last Name / Postal Code each produce the correct inline error
 
-Tests are tagged with `@smoke` (critical flows) and `@regression` (broader coverage) for targeted runs.
+Tests are tagged `@smoke` (critical flows, run on every push) and `@regression` (full coverage).
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 my-1-project-saucedemo/
 ├── tests/
+│   ├── auth/
+│   │   ├── login.spec.ts
+│   │   └── catalog.spec.ts
 │   ├── cart/
 │   │   └── cart.spec.ts
 │   └── checkout/
@@ -55,73 +68,50 @@ my-1-project-saucedemo/
 │       └── playwright.yml
 ├── playwright.config.ts
 ├── package.json
-├── tsconfig.json
-├── .env.example
-└── README.md
+└── .env
 ```
 
 ---
 
-## Getting Started
-
-### Prerequisites
-- Node.js 20 or higher
-- npm
-
-### Installation
+## Getting started
 
 ```bash
-# Clone the repo
-git clone https://github.com/Alexander-webov/my-1-project-saucedemo.git
-cd my-1-project-saucedemo
+git clone https://github.com/Alexander-webov/test-dress-online-store-playwright-ts.git
+cd test-dress-online-store-playwright-ts
 
-# Install dependencies
 npm install
-
-# Install Playwright browsers
 npx playwright install
 ```
 
-### Environment Variables
+### Environment variables
 
-Copy the example file and edit if needed:
-
-```bash
-cp .env.example .env
 ```
-
-`.env`:
-```env
 MAIN_URL=https://www.saucedemo.com
 ```
 
 ---
 
-## Running Tests
+## Running tests
 
 ```bash
-# Run all tests
+# all tests
 npx playwright test
 
-# Run only smoke tests
+# smoke only
 npx playwright test --grep @smoke
 
-# Run only regression tests
+# regression only
 npx playwright test --grep @regression
 
-# Run a specific test file
+# a specific file
 npx playwright test tests/cart/cart.spec.ts
 
-# Run in headed mode (visible browser)
+# headed / UI mode / step debug
 npx playwright test --headed
-
-# Run in UI mode (interactive debugging — recommended while developing)
 npx playwright test --ui
-
-# Debug a single test step by step
 npx playwright test --debug
 
-# Open the last HTML report
+# last HTML report
 npx playwright show-report
 ```
 
@@ -129,217 +119,133 @@ npx playwright show-report
 
 ## Architecture
 
-### Page Object Model (POM)
+### Page Object Model
 
-Each page on saucedemo.com is encapsulated as a class. Tests never reference `data-test` attributes directly — they call business-level methods like `addProductToCart('Sauce Labs Bolt T-Shirt')`. If the markup changes, only the page object needs an update; tests stay untouched.
-
-**Example — `pages/CartPage.ts`:**
+Each page is a class; tests call business-level methods instead of touching `data-test` attributes directly. If the markup changes, only the page object needs updating.
 
 ```typescript
-import { type Page } from '@playwright/test';
-
 export class CartPage {
   constructor(private readonly page: Page) {}
 
-  // Locators exposed as getters — used directly in test assertions
   get itemName() {
-    return this.page.getByTestId('inventory-item-name');
+    return this.page.getByTestId("inventory-item-name");
   }
 
-  get cartBadge() {
-    return this.page.getByTestId('shopping-cart-badge');
-  }
-
-  // Actions — one method, one responsibility
   async gotoCart() {
-    await this.page.getByTestId('shopping-cart-link').click();
+    await this.page.getByTestId("shopping-cart-link").click();
   }
 
   async removeItemFromCart(productName: string) {
-    const slug = productName.toLowerCase().replace(/\s+/g, '-');
+    const slug = productName.toLowerCase().replace(/\s+/g, "-");
     await this.page.getByTestId(`remove-${slug}`).click();
   }
 }
 ```
 
-**Principles followed:**
-- Methods accept business-level parameters (product names, not test-ids) — no leaky abstraction
-- Locators exposed as getters, ready for `expect()` assertions
-- Single responsibility per method
+### Fixtures with a dependency chain
 
----
-
-### Custom Fixtures with Dependency Chain
-
-Most tests need a logged-in user. Instead of duplicating login in every `beforeEach`, fixtures handle it via a dependency chain — `cartPage` and `catalogPage` depend on `loginPage`, so login runs automatically once.
-
-**`fixtures/loggedIn.ts`:**
+Most tests need a logged-in session. Rather than repeating login in every test, `catalogPage`, `cartPage`, and `checkoutPage` all depend on `loginPage`, so login runs once automatically:
 
 ```typescript
-import { test as baseTest, expect } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
-import { CatalogPage } from '../pages/CatalogPage';
-import { CartPage } from '../pages/CartPage';
-import { CheckoutPage } from '../pages/CheckoutPage';
-
-type Pages = {
-  loginPage: LoginPage;
-  catalogPage: CatalogPage;
-  cartPage: CartPage;
-  checkoutPage: CheckoutPage;
-};
-
 export const test = baseTest.extend<Pages>({
   loginPage: async ({ page }, use) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
-    await loginPage.loginUser('standard_user', 'secret_sauce');
+    await loginPage.loginUser("standard_user", "secret_sauce");
     await use(loginPage);
   },
   catalogPage: async ({ page, loginPage }, use) => {
     await use(new CatalogPage(page));
   },
-  cartPage: async ({ page, loginPage }, use) => {
-    await use(new CartPage(page));
-  },
-  checkoutPage: async ({ page, loginPage }, use) => {
-    await use(new CheckoutPage(page));
-  },
+  // cartPage, checkoutPage follow the same pattern
 });
-
-export { expect };
 ```
 
-In a test, just declare the page object you need — login happens automatically:
-
 ```typescript
-test('Item appears in cart with correct name', async ({ catalogPage, cartPage }) => {
-  await catalogPage.addProductToCart('Sauce Labs Bolt T-Shirt');
+test("Item appears in cart with correct name", async ({ catalogPage, cartPage }) => {
+  await catalogPage.addProductToCart("Sauce Labs Bolt T-Shirt");
   await cartPage.gotoCart();
-  await expect(cartPage.itemName).toHaveText('Sauce Labs Bolt T-Shirt');
+  await expect(cartPage.itemName).toHaveText("Sauce Labs Bolt T-Shirt");
 });
 ```
 
----
+### Web-first assertions
 
-### Web-First Assertions
-
-The project uses Playwright's auto-waiting assertions on **locators** rather than manually extracting text. This eliminates a whole class of flakiness from race conditions.
+Assertions live on locators, not on manually extracted text — Playwright retries automatically until the condition holds, removing a whole class of timing flakiness:
 
 ```typescript
-// ✅ Auto-waits for the element, retries until match
-await expect(cartPage.itemName).toHaveText('Sauce Labs Bolt T-Shirt');
+// ✅ auto-waits and retries
+await expect(cartPage.itemName).toHaveText("Sauce Labs Bolt T-Shirt");
 
-// ❌ Race-prone — element may not exist yet at this exact moment
-const text = await page.locator('.name').textContent();
-expect(text).toBe('Sauce Labs Bolt T-Shirt');
+// ❌ race-prone — reads once, no retry
+const text = await page.locator(".name").textContent();
+expect(text).toBe("Sauce Labs Bolt T-Shirt");
 ```
 
----
+### Sort assertions built from real data, not hardcoded lists
 
-### Negative Test Cases
-
-Negative paths are tested explicitly — empty fields on the checkout form must trigger validation errors:
+Rather than asserting a fixed expected order, the test reads the actual rendered list and checks it's internally sorted — this stays correct even if the underlying product set changes:
 
 ```typescript
-test('Continue checkout with empty First Name', async ({ cartPage, catalogPage, checkoutPage }) => {
-  await catalogPage.addProductToCart('Sauce Labs Bolt T-Shirt');
-  await cartPage.gotoCart();
-  await checkoutPage.gotoCheckout();
-  await checkoutPage.fillFormCheckout('', 'Postol', '11201');
-  await checkoutPage.clickContinueBtn();
-  await expect(checkoutPage.errorMessage).toHaveText('Error: First Name is required');
-});
+const names = await catalogPage.getProductNames();
+expect(names).toEqual([...names].sort());
 ```
 
 ---
 
 ## CI/CD — GitHub Actions
 
-Tests run automatically on every push and pull request. The HTML report is uploaded as a workflow artifact for easy debugging of failures.
-
-**`.github/workflows/playwright.yml`:**
+Runs on every push and pull request; the HTML report (traces, screenshots, video on failure) is uploaded as a workflow artifact.
 
 ```yaml
 name: Playwright Tests
-
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-
 jobs:
   test:
-    timeout-minutes: 30
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Playwright tests
-        run: npx playwright test
-        env:
-          MAIN_URL: https://www.saucedemo.com
-
-      - name: Upload HTML report
-        if: always()
-        uses: actions/upload-artifact@v4
+          node-version: lts/*
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
 ```
 
-After every run, the HTML report (including traces, screenshots, and videos for failed tests) is downloadable from the workflow run page.
+---
+
+## Known limitations / next steps
+
+- `.env` is currently committed (not gitignored) — harmless here since it only holds a public URL, but worth moving to `.env.example` + secrets for hygiene
+- No cross-browser run yet — Chromium only
+- Negative checkout cases could be consolidated into one data-driven test instead of three near-duplicates
 
 ---
 
-## Key Practices Applied
+## Key practices applied
 
-- **Page Object Model** — separation of test logic and UI details
-- **Custom fixtures with dependency chain** — no duplicated setup across tests
-- **Web-first assertions** — `expect(locator).toHaveX()` instead of manual text extraction
-- **Business-level method parameters** — `addProductToCart('Product Name')`, not `addProductToCart('add-to-cart-product-name')`
-- **Positive and negative test coverage** — checkout validation is tested explicitly
-- **Test tagging** — `@smoke` / `@regression` for targeted runs
-- **Environment variables** — no hardcoded URLs in test code
-- **CI integration** — tests run on every push, reports archived as artifacts
-
----
-
-## Roadmap
-
-- [ ] Add login tests (locked-out user, wrong credentials, empty fields)
-- [ ] Refactor negative checkout cases into a single data-driven test
-- [ ] Visual regression with Playwright snapshots
-- [ ] Sharding in GitHub Actions for parallel execution
-- [ ] Slack/Telegram notification on CI failure
-- [ ] Performance metrics collection per test
-
----
-
-## Resources
-
-- [Playwright documentation](https://playwright.dev)
-- [Page Object Model — Playwright guide](https://playwright.dev/docs/pom)
-- [Saucedemo test site](https://www.saucedemo.com)
+- Page Object Model with business-level method signatures
+- Custom fixtures with a dependency chain — no duplicated login setup
+- Web-first, auto-retrying assertions
+- Positive and negative coverage (login errors, checkout validation)
+- `@smoke` / `@regression` tagging for targeted runs
+- Environment variables instead of hardcoded URLs
+- CI on every push, with report artifacts for debugging failures
 
 ---
 
 ## Author
 
-[Alexander-webov](https://github.com/Alexander-webov)
-
-> Built as part of my hands-on learning of QA automation. Feedback is welcome.
+[Alexander-webov](https://github.com/Alexander-webov) — built as part of my hands-on QA automation learning. This is the first of four planned portfolio projects before moving into job search.
